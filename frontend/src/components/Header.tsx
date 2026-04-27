@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FaSearch, FaTimes, FaBars, FaUser, FaUserPlus, FaShoppingCart } from 'react-icons/fa';
+import { FaSearch, FaTimes, FaBars, FaUser, FaUserPlus, FaShoppingCart, FaUserCircle } from 'react-icons/fa';
 import { useDebounce } from '../hooks/useDebounce';
 
 interface HeaderProps {
@@ -12,6 +12,9 @@ interface HeaderProps {
 export function Header({ cartCount, searchQuery, onSearchChange }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -20,6 +23,19 @@ export function Header({ cartCount, searchQuery, onSearchChange }: HeaderProps) 
     return false;
   });
   const { pathname } = useLocation();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -88,35 +104,87 @@ export function Header({ cartCount, searchQuery, onSearchChange }: HeaderProps) 
               </div>
             )}
 
-            {/* Mobile: Hamburger button */}
+            {/* Mobile: Hamburger dropdown */}
             {isMobile && (
-              <button
-                className="text-white p-2 shrink-0"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-                aria-expanded={mobileMenuOpen}
-              >
-                {mobileMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
-              </button>
+              <div className="relative" ref={mobileMenuRef}>
+                <button
+                  className="text-white p-2 shrink-0"
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+                  aria-expanded={mobileMenuOpen}
+                >
+                  {mobileMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
+                </button>
+
+                {mobileMenuOpen && (
+                  <div className="mobile-dropdown-card animate-fade-in-scale">
+                    <Link
+                      to="/login"
+                      className="desktop-dropdown-item"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <FaUser size={16} aria-hidden="true" />
+                      <span>Login</span>
+                    </Link>
+
+                    <Link
+                      to="/register"
+                      className="desktop-dropdown-item"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <FaUserPlus size={16} aria-hidden="true" />
+                      <span>Register</span>
+                    </Link>
+
+                    <Link
+                      to="/cart"
+                      className="desktop-dropdown-item"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <FaShoppingCart size={16} aria-hidden="true" />
+                      <span>Cart ({cartCount})</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Desktop nav */}
             {!isMobile && (
               <nav className="flex items-center gap-4" aria-label="Main navigation">
-                <Link
-                  to="/login"
-                  className="flex items-center gap-2 text-white hover:text-gray-200 transition-colors"
-                >
-                  <FaUser size={18} aria-hidden="true" />
-                  <span>Login</span>
-                </Link>
-                <Link
-                  to="/register"
-                  className="flex items-center gap-2 text-white hover:text-gray-200 transition-colors"
-                >
-                  <FaUserPlus size={18} aria-hidden="true" />
-                  <span>Register</span>
-                </Link>
+                {/* User menu dropdown */}
+                <div className="relative" ref={userMenuRef}>
+                  <button
+                    className="flex items-center gap-2 text-white hover:text-gray-200 transition-colors p-2"
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    aria-label={userMenuOpen ? 'Close user menu' : 'Open user menu'}
+                    aria-expanded={userMenuOpen}
+                  >
+                    <FaUserCircle size={22} aria-hidden="true" />
+                  </button>
+
+                  {userMenuOpen && (
+                    <div className="desktop-dropdown animate-fade-in-scale">
+                      <Link
+                        to="/login"
+                        className="desktop-dropdown-item"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <FaUser size={16} aria-hidden="true" />
+                        <span>Login</span>
+                      </Link>
+                      <Link
+                        to="/register"
+                        className="desktop-dropdown-item"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <FaUserPlus size={16} aria-hidden="true" />
+                        <span>Register</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
                 <Link
                   to="/cart"
                   className="flex items-center gap-2 text-white hover:text-gray-200 transition-colors relative"
@@ -132,42 +200,9 @@ export function Header({ cartCount, searchQuery, onSearchChange }: HeaderProps) 
               </nav>
             )}
           </div>
-
-          {/* Mobile: Hamburger menu with Login + Register + Cart */}
-          {isMobile && mobileMenuOpen && (
-            <div className="mt-4 pb-2 animate-fade-in">
-              <div className="flex flex-col gap-2">
-                <Link
-                  to="/login"
-                  className="mobile-menu-btn"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <FaUser size={16} aria-hidden="true" />
-                  <span>Login</span>
-                </Link>
-
-                <Link
-                  to="/register"
-                  className="mobile-menu-btn"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <FaUserPlus size={16} aria-hidden="true" />
-                  <span>Register</span>
-                </Link>
-
-                <Link
-                  to="/cart"
-                  className="mobile-menu-btn"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <FaShoppingCart size={16} aria-hidden="true" />
-                  <span>Cart ({cartCount})</span>
-                </Link>
-              </div>
-            </div>
-          )}
         </div>
       </header>
     </>
   );
 }
+

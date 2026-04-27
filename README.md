@@ -1,6 +1,6 @@
 # Zomato Clone — Production Ready
 
-A modern, production-grade food delivery application built with React 19, TypeScript, Vite, and Tailwind CSS. Features restaurant browsing, menu exploration, cart management, checkout flow, and a comprehensive design system. The backend is built as independent Node.js microservices with an nginx API gateway.
+A modern, production-grade food delivery application built with React 19, TypeScript, Vite, and Tailwind CSS. Features restaurant browsing, menu exploration, cart management, checkout flow, and a comprehensive design system. The backend is built as independent Node.js microservices with an nginx API gateway. Includes full observability with Prometheus, Grafana, Loki, and Node Exporter.
 
 ---
 
@@ -15,6 +15,7 @@ A modern, production-grade food delivery application built with React 19, TypeSc
 - **Accessibility** — ARIA labels, skip links, focus-visible states, screen-reader support
 - **Error Resilience** — ErrorBoundary for crash recovery, 404 page, loading skeletons
 - **PWA Ready** — Web manifest, theme color, responsive meta tags
+- **Observability** — Prometheus metrics, Grafana dashboards, Loki log aggregation, Node Exporter host metrics
 
 ---
 
@@ -31,6 +32,10 @@ A modern, production-grade food delivery application built with React 19, TypeSc
 | Formatting | Prettier |
 | Testing | Vitest |
 | Container | Docker + nginx |
+| Metrics | Prometheus + prom-client |
+| Dashboards | Grafana |
+| Logs | Loki + Promtail |
+| Host Metrics | Node Exporter |
 
 ---
 
@@ -64,8 +69,22 @@ zomato-microservices/
 │   │   └── payment-service/    # Payment processing (port 3005)
 │   ├── config/
 │   ├── docs/
-│   ├── docker-compose.yml      # Backend services orchestration
+│   ├── docker-compose.yml      # Backend-only orchestration
 │   └── package.json
+│
+├── monitoring/                 # Observability stack
+│   ├── prometheus/
+│   │   └── prometheus.yml      # Scrape configs for all services
+│   ├── grafana/
+│   │   ├── dashboards/
+│   │   │   └── microservices-dashboard.json
+│   │   └── provisioning/
+│   │       ├── datasources/
+│   │       └── dashboards/
+│   ├── loki/
+│   │   └── loki.yml            # Log storage config
+│   └── promtail/
+│       └── promtail.yml        # Docker log shipper config
 │
 ├── .github/
 │   └── workflows/
@@ -125,15 +144,15 @@ npm run install:all
 # Start all services locally
 npm run dev
 
-# Start services with Docker
+# Start services with Docker (backend only, no monitoring)
 npm run docker:build
 npm run docker:up
 
 # View logs
-npm run docker:logs
+docker-compose logs -f
 
 # Stop services
-npm run docker:down
+docker-compose down
 ```
 
 Services will be available:
@@ -167,7 +186,7 @@ Frontend will be available at `http://localhost:8080`.
 ```bash
 cd backend
 
-# Build and start all services
+# Build and start all services (no monitoring)
 docker-compose up -d
 
 # View logs
@@ -180,8 +199,8 @@ docker-compose down
 ### Full Stack with Docker Compose (Root)
 
 ```bash
-# From the project root
-docker-compose up -d
+# From the project root — start everything including monitoring
+docker-compose up -d --build
 
 # View logs
 docker-compose logs -f
@@ -191,6 +210,96 @@ docker-compose down
 ```
 
 Complete stack will be available at `http://localhost` (frontend) and `http://localhost:8080` (API gateway).
+
+---
+
+## 🚀 Observability & Monitoring
+
+The application ships with a complete observability stack:
+
+| Tool | URL | Default Credentials | Purpose |
+|------|-----|---------------------|---------|
+| **Grafana** | http://localhost:3000 | `admin` / `admin` | Dashboards & visualization |
+| **Prometheus** | http://localhost:9090 | — | Metrics collection & querying |
+| **Loki** | http://localhost:3100 | — | Log aggregation & storage |
+| **Node Exporter** | http://localhost:9100 | — | Host system metrics (CPU, memory, disk, network) |
+
+### Dashboards Available
+
+Grafana comes pre-loaded with the **Zomato Clone — Microservices Overview** dashboard, which includes:
+
+- **Service Health Status** — 6 real-time status tiles for all microservices + Node Exporter
+- **Request Rate (req/s)** — HTTP traffic across all services
+- **Success Rate (%)** — 1xx-4xx vs 5xx error rates
+- **Request Latency** — p50 and p95 duration histograms
+- **Memory Usage (App)** — Node.js process memory per service
+- **Host CPU Usage** — System CPU utilization from Node Exporter
+- **Host Memory Usage** — System memory utilization from Node Exporter
+- **Host Disk Usage** — Root filesystem utilization from Node Exporter
+- **Host Network I/O** — Receive/transmit bytes from Node Exporter
+- **Error Logs Stream** — Live error log tail from all containers (via Loki)
+
+### Application Metrics Exposed
+
+Each microservice exposes default Node.js + custom application metrics on `/metrics`:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `http_requests_total` | Counter | Total requests by method, route, status, service |
+| `http_request_duration_seconds` | Histogram | Request latency distribution (11 buckets) |
+| `orders_created_total` | Counter | Order placements (order-service) |
+| `orders_cancelled_total` | Counter | Order cancellations (order-service) |
+| `restaurant_searches_total` | Counter | Search & filter queries (restaurant-service) |
+| `deliveries_created_total` | Counter | Delivery creations (delivery-service) |
+| `deliveries_completed_total` | Counter | Deliveries completed (delivery-service) |
+| `payments_processed_total` | Counter | Payments by status & method (payment-service) |
+| `payments_refunded_total` | Counter | Refunds processed (payment-service) |
+| `process_resident_memory_bytes` | Gauge | Node.js memory usage |
+| `nodejs_eventloop_lag_seconds` | Gauge | Event loop lag |
+
+### Host System Metrics (Node Exporter)
+
+Node Exporter exposes hardware and OS metrics from the underlying host:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `node_cpu_seconds_total` | Counter | CPU time per mode (idle, user, system, etc.) |
+| `node_memory_MemTotal_bytes` | Gauge | Total system memory |
+| `node_memory_MemAvailable_bytes` | Gauge | Available system memory |
+| `node_filesystem_size_bytes` | Gauge | Filesystem total size |
+| `node_filesystem_avail_bytes` | Gauge | Filesystem available space |
+| `node_network_receive_bytes_total` | Counter | Network bytes received per interface |
+| `node_network_transmit_bytes_total` | Counter | Network bytes transmitted per interface |
+| `node_load1` | Gauge | 1-minute load average |
+| `node_load5` | Gauge | 5-minute load average |
+| `node_load15` | Gauge | 15-minute load average |
+
+### Logs
+
+All container logs are automatically collected by **Promtail** and shipped to **Loki**. No application code changes needed. The nginx gateway outputs structured JSON logs. Query logs in Grafana's Explore view using LogQL:
+
+```logql
+{job="docker-logs"} |= "ERROR"
+{container_name="order-service"} |= "cart"
+```
+
+---
+
+## Service Ports
+
+| Service | Host Port | Container Port | Notes |
+|---------|-----------|----------------|-------|
+| Frontend | `80` | `80` | nginx serving built React app |
+| API Gateway | `8080` | `80` | nginx reverse proxy to services |
+| User Service | `3001` | `3000` | Internal microservice |
+| Restaurant Service | `3002` | `3000` | Internal microservice |
+| Order Service | `3003` | `3000` | Internal microservice |
+| Delivery Service | `3004` | `3000` | Internal microservice |
+| Payment Service | `3005` | `3000` | Internal microservice |
+| **Grafana** | **`3000`** | `3000` | **Observability dashboards** |
+| **Prometheus** | **`9090`** | `9090` | **Metrics database** |
+| **Loki** | **`3100`** | `3100` | **Log storage** |
+| **Node Exporter** | **`9100`** | `9100` | **Host system metrics** |
 
 ---
 
@@ -259,4 +368,3 @@ The app uses a comprehensive CSS custom property design system in `index.css`:
 ## License
 
 MIT — Open source for educational and commercial use.
-

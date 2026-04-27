@@ -7,9 +7,53 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const client = require('prom-client');
 
 const app = express();
 const PORT = process.env.DELIVERY_SERVICE_PORT || 3000;
+
+// ============ PROMETHEUS METRICS ============
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status', 'service'],
+  registers: [register],
+});
+
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status', 'service'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [register],
+});
+
+const deliveriesCreatedTotal = new client.Counter({
+  name: 'deliveries_created_total',
+  help: 'Total number of deliveries created',
+  registers: [register],
+});
+
+const deliveriesCompletedTotal = new client.Counter({
+  name: 'deliveries_completed_total',
+  help: 'Total number of deliveries completed',
+  registers: [register],
+});
+
+// Metrics middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const route = req.route ? req.route.path : req.path;
+    httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode, service: 'delivery-service' });
+    httpRequestDuration.observe({ method: req.method, route, status: res.statusCode, service: 'delivery-service' }, duration);
+  });
+  next();
+});
 
 // Middleware
 app.use(cors());
@@ -49,6 +93,12 @@ deliveries.set(demoDeliveryId, {
   ],
 });
 
+// ============ METRICS ENDPOINT ============
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
 // ============ HEALTH CHECK ============
 app.get('/health', (req, res) => {
   res.json({ status: 'UP', service: 'delivery-service', timestamp: new Date().toISOString() });
@@ -60,22 +110,22 @@ app.get('/health', (req, res) => {
 app.get('/api/drivers', (req, res) => {
   const { status } = req.query;
   let result = Array.from(drivers.values());
-  
+
   if (status) {
     result = result.filter(d => d.status === status);
   }
-  
+
   res.json(result);
 });
 
 // Get driver by ID
 app.get('/api/drivers/:driverId', (req, res) => {
   const driver = drivers.get(req.params.driverId);
-  
+
   if (!driver) {
     return res.status(404).json({ error: 'Driver not found' });
   }
-  
+
   res.json(driver);
 });
 
@@ -85,14 +135,14 @@ app.get('/api/drivers/:driverId', (req, res) => {
 app.get('/api/deliveries', (req, res) => {
   const { orderId, status } = req.query;
   let result = Array.from(deliveries.values());
-  
+
   if (orderId) {
     result = result.filter(d => d.orderId === orderId);
   }
   if (status) {
     result = result.filter(d => d.status === status);
   }
-  
+
   res.json({
     count: result.length,
     deliveries: result,
@@ -102,11 +152,11 @@ app.get('/api/deliveries', (req, res) => {
 // Get delivery by ID
 app.get('/api/deliveries/:deliveryId', (req, res) => {
   const delivery = deliveries.get(req.params.deliveryId);
-  
+
   if (!delivery) {
     return res.status(404).json({ error: 'Delivery not found' });
   }
-  
+
   const driver = drivers.get(delivery.driverId);
   res.json({
     ...delivery,
@@ -124,7 +174,7 @@ app.post('/api/deliveries', (req, res) => {
 
   // Find available driver
   const availableDrivers = Array.from(drivers.values()).filter(d => d.status === 'available');
-  const driver = availableDrivers.length > 0 
+  const driver = availableDrivers.length > 0
     ? availableDrivers[Math.floor(Math.random() * availableDrivers.length)]
     : null;
 
@@ -135,7 +185,7 @@ app.post('/api/deliveries', (req, res) => {
 
   const deliveryId = 'dlv-' + uuidv4();
   const estimatedDeliveryTime = new Date(Date.now() + (estimatedTimeMinutes || 45) * 60000).toISOString();
-  
+
   const delivery = {
     id: deliveryId,
     orderId,
@@ -151,6 +201,7 @@ app.post('/api/deliveries', (req, res) => {
   };
 
   deliveries.set(deliveryId, delivery);
+  deliveriesCreatedTotal.inc();
 
   res.status(201).json({
     message: 'Delivery created',
@@ -165,7 +216,7 @@ app.post('/api/deliveries', (req, res) => {
 app.patch('/api/deliveries/:deliveryId/status', (req, res) => {
   const { status, location, message } = req.body;
   const validStatuses = ['confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled'];
-  
+
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
@@ -192,7 +243,8 @@ app.patch('/api/deliveries/:deliveryId/status', (req, res) => {
 
   if (status === 'delivered') {
     delivery.deliveryTime = new Date().toISOString();
-    
+    deliveriesCompletedTotal.inc();
+
     // Free up driver
     if (delivery.driverId) {
       const driver = drivers.get(delivery.driverId);
@@ -206,7 +258,7 @@ app.patch('/api/deliveries/:deliveryId/status', (req, res) => {
 // Update driver location (for live tracking)
 app.patch('/api/deliveries/:deliveryId/location', (req, res) => {
   const { lat, lng } = req.body;
-  
+
   const delivery = deliveries.get(req.params.deliveryId);
   if (!delivery) {
     return res.status(404).json({ error: 'Delivery not found' });
@@ -221,13 +273,13 @@ app.patch('/api/deliveries/:deliveryId/location', (req, res) => {
 // Get live tracking for an order
 app.get('/api/tracking/:orderId', (req, res) => {
   const delivery = Array.from(deliveries.values()).find(d => d.orderId === req.params.orderId);
-  
+
   if (!delivery) {
     return res.status(404).json({ error: 'Tracking not found for this order' });
   }
 
   const driver = drivers.get(delivery.driverId);
-  
+
   res.json({
     orderId: req.params.orderId,
     deliveryId: delivery.id,
@@ -243,13 +295,13 @@ app.get('/api/tracking/:orderId', (req, res) => {
 
 app.post('/api/deliveries/estimate', (req, res) => {
   const { restaurantLocation, deliveryLocation } = req.body;
-  
+
   // Simple mock ETA calculation
   const baseTime = 30; // minutes
   const randomVariation = Math.floor(Math.random() * 20) - 5; // -5 to +15 minutes
-  
+
   const estimatedMinutes = baseTime + randomVariation;
-  
+
   res.json({
     estimatedMinutes,
     estimatedTime: new Date(Date.now() + estimatedMinutes * 60000).toISOString(),
@@ -262,11 +314,6 @@ app.post('/api/deliveries/estimate', (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Service running on port ${PORT}`);
 });
-
-// app.listen(PORT, "0.0.0.0", () => {
-//   console.log(`Delivery Service running on http://localhost:${PORT}`);
-//   console.log(`   Health: http://localhost:${PORT}/health`);
-// });
 
 module.exports = app;
 

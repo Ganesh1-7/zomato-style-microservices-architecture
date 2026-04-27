@@ -9,6 +9,12 @@ frontend/node_modules/
 backend/node_modules/
 backend/services/*/node_modules/
 
+# Package lock files (optional — keep if you want deterministic installs)
+# Uncomment below to ignore lock files
+# package-lock.json
+# frontend/package-lock.json
+# backend/services/*/package-lock.json
+
 # Environment files
 .env
 .env.local
@@ -23,10 +29,23 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Monitoring data (Docker volumes)
+prometheus-data/
+grafana-data/
+loki-data/
+tmp/
+*.tmp
+
+# Test & coverage
+coverage/
+*.lcov
+.nyc_output/
+
 # Editor & IDE
 .vscode/*
-.vscode/extensions.json
+!.vscode/extensions.json
 .idea/
+*.iml
 .DS_Store
 *.suo
 *.ntvs*
@@ -36,3 +55,11 @@ lerna-debug.log*
 
 # OS
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Misc
+*.tar
+*.tar.gz
+*.zip
+TODO.md

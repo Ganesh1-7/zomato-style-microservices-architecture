@@ -7,9 +7,47 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const client = require('prom-client');
 
 const app = express();
 const PORT = process.env.USER_SERVICE_PORT || 3000;
+
+// ============ PROMETHEUS METRICS ============
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status', 'service'],
+  registers: [register],
+});
+
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status', 'service'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [register],
+});
+
+const usersRegisteredTotal = new client.Counter({
+  name: 'users_registered_total',
+  help: 'Total number of registered users',
+  registers: [register],
+});
+
+// Metrics middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const route = req.route ? req.route.path : req.path;
+    httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode, service: 'user-service' });
+    httpRequestDuration.observe({ method: req.method, route, status: res.statusCode, service: 'user-service' }, duration);
+  });
+  next();
+});
 
 // Middleware
 app.use(cors());
@@ -48,6 +86,12 @@ users.set(demoUserId, {
   ],
 });
 
+// ============ METRICS ENDPOINT ============
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
 // ============ HEALTH CHECK ============
 app.get('/health', (req, res) => {
   res.json({ status: 'UP', service: 'user-service', timestamp: new Date().toISOString() });
@@ -80,7 +124,8 @@ app.post('/api/users/register', (req, res) => {
   };
 
   users.set(userId, user);
-  
+  usersRegisteredTotal.inc();
+
   const token = uuidv4();
   sessions.set(token, { userId, createdAt: new Date().toISOString() });
 
@@ -131,7 +176,6 @@ app.get('/api/users/me', (req, res) => {
   const session = sessions.get(token);
 
   if (!session) {
-    // Return demo user for unauthenticated requests
     const demoUser = users.get(demoUserId);
     return res.json({
       id: demoUser.id,
@@ -190,7 +234,7 @@ app.get('/api/users/me/addresses', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
   const session = sessions.get(token);
   const userId = session ? session.userId : demoUserId;
-  
+
   const user = users.get(userId);
   res.json(user?.addresses || []);
 });
@@ -200,14 +244,14 @@ app.post('/api/users/me/addresses', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
   const session = sessions.get(token);
   const userId = session ? session.userId : demoUserId;
-  
+
   const user = users.get(userId);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
 
   const { label, street, city, zipCode, isDefault } = req.body;
-  
+
   if (!label || !street || !city || !zipCode) {
     return res.status(400).json({ error: 'Label, street, city, and zipCode are required' });
   }
@@ -234,7 +278,7 @@ app.put('/api/users/me/addresses/:addressId', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
   const session = sessions.get(token);
   const userId = session ? session.userId : demoUserId;
-  
+
   const user = users.get(userId);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
@@ -246,7 +290,7 @@ app.put('/api/users/me/addresses/:addressId', (req, res) => {
   }
 
   const { label, street, city, zipCode, isDefault } = req.body;
-  
+
   if (isDefault) {
     user.addresses.forEach(addr => addr.isDefault = false);
   }
@@ -265,7 +309,7 @@ app.delete('/api/users/me/addresses/:addressId', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
   const session = sessions.get(token);
   const userId = session ? session.userId : demoUserId;
-  
+
   const user = users.get(userId);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
@@ -286,9 +330,5 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`Service running on port ${PORT}`);
 });
 
-// app.listen(PORT, () => {
-//   console.log(`🚀 User Service running on http://localhost:${PORT}`);
-//   console.log(`   Health: http://localhost:${PORT}/health`);
-// });
-
 module.exports = app;
+

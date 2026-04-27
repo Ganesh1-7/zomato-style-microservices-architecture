@@ -7,9 +7,53 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const client = require('prom-client');
 
 const app = express();
 const PORT = process.env.ORDER_SERVICE_PORT || 3000;
+
+// ============ PROMETHEUS METRICS ============
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status', 'service'],
+  registers: [register],
+});
+
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status', 'service'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [register],
+});
+
+const ordersCreatedTotal = new client.Counter({
+  name: 'orders_created_total',
+  help: 'Total number of orders created',
+  registers: [register],
+});
+
+const ordersCancelledTotal = new client.Counter({
+  name: 'orders_cancelled_total',
+  help: 'Total number of orders cancelled',
+  registers: [register],
+});
+
+// Metrics middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const route = req.route ? req.route.path : req.path;
+    httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode, service: 'order-service' });
+    httpRequestDuration.observe({ method: req.method, route, status: res.statusCode, service: 'order-service' }, duration);
+  });
+  next();
+});
 
 // Middleware
 app.use(cors());
@@ -17,7 +61,7 @@ app.use(express.json());
 
 // In-memory data stores
 const orders = new Map();
-const carts = new Map(); // userId -> cart items
+const carts = new Map();
 
 // Seed a demo order
 const demoOrderId = 'order-' + uuidv4();
@@ -42,6 +86,12 @@ orders.set(demoOrderId, {
   },
   createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
   deliveredAt: new Date(Date.now() - 86400000).toISOString(),
+});
+
+// ============ METRICS ENDPOINT ============
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
 });
 
 // ============ HEALTH CHECK ============
@@ -112,7 +162,7 @@ app.put('/api/cart/items/:itemId', (req, res) => {
 // Remove from cart
 app.delete('/api/cart/items/:itemId', (req, res) => {
   const userId = req.headers['x-user-id'] || 'demo-user';
-  
+
   const cart = carts.get(userId);
   if (!cart) {
     return res.status(404).json({ error: 'Cart not found' });
@@ -136,7 +186,7 @@ app.delete('/api/cart', (req, res) => {
 app.get('/api/orders', (req, res) => {
   const userId = req.headers['x-user-id'] || 'demo-user';
   const userOrders = Array.from(orders.values()).filter(o => o.userId === userId);
-  
+
   res.json({
     count: userOrders.length,
     orders: userOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
@@ -146,7 +196,7 @@ app.get('/api/orders', (req, res) => {
 // Get order by ID
 app.get('/api/orders/:orderId', (req, res) => {
   const order = orders.get(req.params.orderId);
-  
+
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
   }
@@ -190,6 +240,7 @@ app.post('/api/orders', (req, res) => {
   };
 
   orders.set(orderId, order);
+  ordersCreatedTotal.inc();
 
   // Clear cart after order
   carts.delete(userId);
@@ -203,7 +254,7 @@ app.post('/api/orders', (req, res) => {
 // Cancel order
 app.patch('/api/orders/:orderId/cancel', (req, res) => {
   const order = orders.get(req.params.orderId);
-  
+
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
   }
@@ -214,7 +265,8 @@ app.patch('/api/orders/:orderId/cancel', (req, res) => {
 
   order.status = 'cancelled';
   order.cancelledAt = new Date().toISOString();
-  
+  ordersCancelledTotal.inc();
+
   res.json({ message: 'Order cancelled', order });
 });
 
@@ -222,7 +274,7 @@ app.patch('/api/orders/:orderId/cancel', (req, res) => {
 app.patch('/api/orders/:orderId/status', (req, res) => {
   const { status } = req.body;
   const validStatuses = ['confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled'];
-  
+
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
@@ -245,7 +297,7 @@ app.patch('/api/orders/:orderId/status', (req, res) => {
 app.get('/api/orders/stats/summary', (req, res) => {
   const userId = req.headers['x-user-id'] || 'demo-user';
   const userOrders = Array.from(orders.values()).filter(o => o.userId === userId);
-  
+
   const totalSpent = userOrders.reduce((sum, o) => sum + o.total, 0);
   const totalOrders = userOrders.length;
   const deliveredOrders = userOrders.filter(o => o.status === 'delivered').length;
@@ -264,9 +316,5 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`Service running on port ${PORT}`);
 });
 
-// app.listen(PORT, () => {
-//   console.log(`📦 Order Service running on http://localhost:${PORT}`);
-//   console.log(`   Health: http://localhost:${PORT}/health`);
-// });
-
 module.exports = app;
+

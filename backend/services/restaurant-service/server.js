@@ -6,16 +6,53 @@
 
 const express = require('express');
 const cors = require('cors');
+const client = require('prom-client');
 
 const app = express();
 const PORT = process.env.RESTAURANT_SERVICE_PORT || 3000;
+
+// ============ PROMETHEUS METRICS ============
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status', 'service'],
+  registers: [register],
+});
+
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status', 'service'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [register],
+});
+
+const restaurantSearchesTotal = new client.Counter({
+  name: 'restaurant_searches_total',
+  help: 'Total number of restaurant searches',
+  registers: [register],
+});
+
+// Metrics middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const route = req.route ? req.route.path : req.path;
+    httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode, service: 'restaurant-service' });
+    httpRequestDuration.observe({ method: req.method, route, status: res.statusCode, service: 'restaurant-service' }, duration);
+  });
+  next();
+});
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
 // ============ DATA STORE ============
-// Matching the frontend mockData.ts exactly
 
 const restaurants = [
   {
@@ -125,6 +162,12 @@ const restaurants = [
   },
 ];
 
+// ============ METRICS ENDPOINT ============
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
 // ============ HEALTH CHECK ============
 app.get('/health', (req, res) => {
   res.json({ status: 'UP', service: 'restaurant-service', timestamp: new Date().toISOString() });
@@ -138,11 +181,15 @@ app.get('/api/restaurants', (req, res) => {
 
   let result = [...restaurants];
 
+  if (search || cuisine || minRating) {
+    restaurantSearchesTotal.inc();
+  }
+
   // Search
   if (search) {
     const query = String(search).toLowerCase();
-    result = result.filter(r => 
-      r.name.toLowerCase().includes(query) || 
+    result = result.filter(r =>
+      r.name.toLowerCase().includes(query) ||
       r.cuisine.toLowerCase().includes(query)
     );
   }
@@ -255,13 +302,9 @@ app.get('/api/categories', (req, res) => {
 
 // ============ START SERVER ============
 
-app.listen(PORT, "0.0.0.0", () => { 
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Service running on port ${PORT}`);
 });
 
-// app.listen(PORT, () => {
-//   console.log(`Restaurant Service running on http://localhost:${PORT}`);
-//   console.log(`   Health: http://localhost:${PORT}/health`);
-// });
-
 module.exports = app;
+

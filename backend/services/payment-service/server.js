@@ -7,9 +7,54 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const client = require('prom-client');
 
 const app = express();
 const PORT = process.env.PAYMENT_SERVICE_PORT || 3000;
+
+// ============ PROMETHEUS METRICS ============
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status', 'service'],
+  registers: [register],
+});
+
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status', 'service'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [register],
+});
+
+const paymentsProcessedTotal = new client.Counter({
+  name: 'payments_processed_total',
+  help: 'Total number of payments processed',
+  labelNames: ['status', 'method'],
+  registers: [register],
+});
+
+const paymentsRefundedTotal = new client.Counter({
+  name: 'payments_refunded_total',
+  help: 'Total number of payments refunded',
+  registers: [register],
+});
+
+// Metrics middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const route = req.route ? req.route.path : req.path;
+    httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode, service: 'payment-service' });
+    httpRequestDuration.observe({ method: req.method, route, status: res.statusCode, service: 'payment-service' }, duration);
+  });
+  next();
+});
 
 // Middleware
 app.use(cors());
@@ -31,6 +76,12 @@ transactions.set(demoTransactionId, {
   cardLastFour: '4242',
   createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
   completedAt: new Date(Date.now() - 86400000 * 2 + 60000).toISOString(),
+});
+
+// ============ METRICS ENDPOINT ============
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
 });
 
 // ============ HEALTH CHECK ============
@@ -80,6 +131,7 @@ app.post('/api/payments', (req, res) => {
   };
 
   transactions.set(transactionId, transaction);
+  paymentsProcessedTotal.inc({ status: transaction.status, method });
 
   if (isSuccess) {
     res.status(201).json({
@@ -145,6 +197,7 @@ app.post('/api/payments/:transactionId/refund', (req, res) => {
 
   transaction.status = 'refunded';
   transaction.refundedAt = new Date().toISOString();
+  paymentsRefundedTotal.inc();
 
   res.json({
     message: 'Refund processed successfully',

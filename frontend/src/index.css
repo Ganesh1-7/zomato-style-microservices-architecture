@@ -638,6 +638,69 @@ p {
 }
 
 /* =============================================
+   DESKTOP USER DROPDOWN
+   ============================================= */
+
+.desktop-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  min-width: 180px;
+  background: var(--bg-card);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-color);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  z-index: var(--z-dropdown);
+}
+
+.desktop-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--border-radius-md);
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  transition: all var(--transition-base);
+  text-decoration: none;
+}
+
+.desktop-dropdown-item:hover {
+  background: var(--gray-100);
+  color: var(--primary-600);
+}
+
+.desktop-dropdown-item:active {
+  background: var(--gray-200);
+  transform: scale(0.98);
+}
+
+/* =============================================
+   MOBILE DROPDOWN CARD (same compact style as desktop)
+   ============================================= */
+
+.mobile-dropdown-card {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: var(--bg-card);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-color);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 180px;
+  z-index: var(--z-dropdown);
+}
+
+/* =============================================
    COMPACT FILTERS
    ============================================= */
 
@@ -730,4 +793,3 @@ p {
   background: var(--primary-100);
   color: var(--primary-700);
 }
-

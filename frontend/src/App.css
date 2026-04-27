@@ -483,7 +483,7 @@
 }
 
 .filter-chip:hover {
-  border-color: var(--primary-300);
+  border-color: var(--primary-light);
   color: var(--primary);
 }
 
@@ -568,7 +568,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: var(--primary-300);
+  color: var(--primary-light);
   font-weight: 600;
   margin-bottom: 2rem;
   transition: all var(--transition-fast);
@@ -686,7 +686,7 @@
 }
 
 .category-btn:hover {
-  border-color: var(--primary-300);
+  border-color: var(--primary-light);
   color: var(--primary);
 }
 
@@ -1027,7 +1027,7 @@
   padding: 1rem;
   background: var(--primary-50);
   border-radius: var(--border-radius-lg);
-  border: 1px dashed var(--primary-300);
+  border: 1px dashed var(--primary-light);
 }
 
 .delivery-progress-bar {
