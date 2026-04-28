@@ -7,8 +7,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toast } from './components/Toast';
 import { useToast } from './hooks/useToast';
 import { Cart, CartItem as CartItemType } from './components/Cart';
-import { MenuItem } from './data/mockData';
-import { restaurants } from './data/mockData';
+import { MenuItem, restaurants } from './data/mockData';
 import './App.css';
 
 const RestaurantList = lazy(() => import('./components/RestaurantList').then(m => ({ default: m.RestaurantList })));
@@ -38,7 +37,14 @@ function App() {
   });
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCuisine, setSelectedCuisine] = useState('');
+  const [selectedRating, setSelectedRating] = useState(0);
+  const [sortBy, setSortBy] = useState('rating');
   const { toasts, addToast, removeToast } = useToast();
+
+  const cuisines = useMemo(() => {
+    return Array.from(new Set(restaurants.flatMap((r) => r.cuisine.split(', '))));
+  }, []);
 
   useEffect(() => {
     try {
@@ -118,12 +124,19 @@ function App() {
             cartCount={cartItems.length}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
+            selectedCuisine={selectedCuisine}
+            onCuisineChange={setSelectedCuisine}
+            selectedRating={selectedRating}
+            onRatingChange={setSelectedRating}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            cuisines={cuisines}
           />
 
           <main id="main-content" className="flex-1">
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={<RestaurantList searchQuery={searchQuery} />} />
+                <Route path="/" element={<RestaurantList searchQuery={searchQuery} selectedCuisine={selectedCuisine} selectedRating={selectedRating} sortBy={sortBy} />} />
                 <Route
                   path="/restaurant/:id"
                   element={<RestaurantDetails onAddToCart={handleAddToCart} />}
@@ -167,4 +180,3 @@ function App() {
 }
 
 export default App;
-
