@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: zomato
-  labels:
-    app.kubernetes.io/name: zomato-clone
-    app.kubernetes.io/instance: zomato
-    app.kubernetes.io/part-of: zomato-clone
-
