@@ -1,0 +1,14 @@
+name: CICD
+
+on: 
+    push:
+        branches:
+            - main
+jobs:
+    build:
+        runs-on: ubuntu-latest           
+        
+        steps:
+        - uses: actions/checkout@v2
+        - name: build delivery service
+          run: docker build -t delivery-service:latest ../backend/delivery-service/Dockerfile
