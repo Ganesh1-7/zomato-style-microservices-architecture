@@ -7,9 +7,8 @@
 const express = require('express');
 const cors = require('cors');
 const client = require('prom-client');
-const {
-  createRequestIdMiddleware,
-} = require('../../logging/logger');
+// createRequestIdMiddleware import removed (logging/logger module missing in this repo)
+
 
 const app = express();
 const PORT = process.env.RESTAURANT_SERVICE_PORT || 3000;
@@ -54,7 +53,7 @@ app.use((req, res, next) => {
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(createRequestIdMiddleware());
+
 
 
 // ============ DATA STORE ============

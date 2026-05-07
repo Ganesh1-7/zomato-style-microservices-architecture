@@ -8,9 +8,8 @@ const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const client = require('prom-client');
-const {
-  createRequestIdMiddleware,
-} = require('../../logging/logger');
+// createRequestIdMiddleware import removed (logging/logger module missing in this repo)
+
 
 
 const app = express();
@@ -56,10 +55,11 @@ app.use((req, res, next) => {
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(createRequestIdMiddleware());
+
 // In-memory data store
 
 const users = new Map();
+
 const sessions = new Map();
 
 // Seed a demo user

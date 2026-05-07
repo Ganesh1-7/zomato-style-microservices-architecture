@@ -8,7 +8,8 @@ const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const client = require('prom-client');
-const { createRequestIdMiddleware } = require('../../logging/logger');
+// createRequestIdMiddleware import removed (logging/logger module missing in this repo)
+
 
 const app = express();
 const PORT = process.env.ORDER_SERVICE_PORT || 3000;
@@ -59,7 +60,7 @@ app.use((req, res, next) => {
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(createRequestIdMiddleware());
+
 
 
 // In-memory data stores
