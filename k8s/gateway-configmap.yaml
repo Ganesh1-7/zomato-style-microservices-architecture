@@ -59,27 +59,27 @@ data:
         # ✅ FIX: upstreams with resolve + basic fail handling
         upstream user_service {
             zone user_service 64k;
-            server user-service:3000 resolve;
+            server user-service:3000;
         }
     
         upstream restaurant_service {
             zone restaurant_service 64k;
-            server restaurant-service:3000 resolve;
+            server restaurant-service:3000;
         }
     
         upstream order_service {
             zone order_service 64k;
-            server order-service:3000 resolve;
+            server order-service:3000;
         }
     
         upstream delivery_service {
             zone delivery_service 64k;
-            server delivery-service:3000 resolve;
+            server delivery-service:3000;
         }
     
         upstream payment_service {
             zone payment_service 64k;
-            server payment-service:3000 resolve;
+            server payment-service:3000;
         }
     
         server {
