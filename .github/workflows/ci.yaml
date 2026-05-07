@@ -37,3 +37,25 @@ jobs:
 
       - name: Push Docker Image
         run: docker push ganesh1702/${{ matrix.service }}:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Kubernetes
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            if [ ! -d "zomato-style-microservices-architecture" ]; then
+              git clone https://github.com/Ganesh1-7/zomato-style-microservices-architecture.git
+            fi
+
+            cd zomato-style-microservices-architecture
+
+            git pull origin main
+
+            kubectl apply -f k8s/
