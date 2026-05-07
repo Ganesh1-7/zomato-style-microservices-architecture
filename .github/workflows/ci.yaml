@@ -10,5 +10,19 @@ jobs:
         
         steps:
         - uses: actions/checkout@v2
+        - name: build restaurant service
+          run: docker build -t restaurant-service:latest -f backend/services/restaurant-service/Dockerfile backend/services/restaurant-service
+
+        - name: build order service
+          run: docker build -t order-service:latest -f backend/services/order-service/Dockerfile backend/services/order-service
+
+        - name: build payment service
+          run: docker build -t payment-service:latest -f backend/services/payment-service/Dockerfile backend/services/payment-service
+
         - name: build delivery service
           run: docker build -t delivery-service:latest -f backend/services/delivery-service/Dockerfile backend/services/delivery-service
+
+        - name: build user service
+          run: docker build -t user-service:latest -f backend/services/user-service/Dockerfile backend/services/user-service
+
+    
