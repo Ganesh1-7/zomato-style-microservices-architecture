@@ -11,7 +11,6 @@ data:
 
     http {
         # ✅ FIX: Kubernetes DNS resolver (prevents crash)
-        resolver kube-dns.kube-system.svc.cluster.local valid=10s;
     
         types {
             text/html                             html htm shtml;
